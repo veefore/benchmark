@@ -96,12 +96,6 @@ ui32 CompareResult(const std::vector<ui64>& result, ui64 refMean, ui64 refStd) {
     }
 }
 
-ui64 factorial(ui64 n) {
-    if (n == 0)
-        return 1;
-    return n * factorial(n - 1);
-}
-
 ui64 RandomLatencyStd(const std::vector<ui64>& latencies, ui32 batchSize) {
     // Generate all possible sums of latencies.
     ui64 size = latencies.size();
