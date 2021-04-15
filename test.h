@@ -55,8 +55,6 @@ private:
 
 ui32 CompareResult(const std::vector<ui64>& result, ui64 refMean, ui64 refStd);
 
-ui64 Factorial(ui64 n);
-
 ui64 RandomLatencyStd(const std::vector<ui64>& latencies, ui32 batchSize);
 
 void RunTests();
