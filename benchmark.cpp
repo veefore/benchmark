@@ -8,7 +8,6 @@
 
 #include <memory> // unique_ptr
 #include <chrono> // std::chrono::*
-#include <numeric> // std::accumulate()
 #include <stdexcept> // runtime_error
 #include <cmath> // sqrtl()
 #include <sys/uio.h> // struct iovec
@@ -99,6 +98,7 @@ std::vector<ui64> TBenchmark::Benchmark() {
             batchLatency += latency;
         }
         latencies.push_back(batchLatency);
+        
 
         // Make the data different to avoid system optimizations.
         for (ui32 i = 0; i < BatchSize; i++) {
@@ -122,12 +122,12 @@ std::vector<ui64> TBenchmark::Benchmark() {
             if (latencies.size() < Warmup.SampleSize)
                 continue;
             std::vector<ui64> warmupLatencies(Warmup.SampleSize);
-            for (ui32 i = 0; i < 10; i++)
+            for (ui32 i = 0; i < Warmup.SampleSize; i++)
                 warmupLatencies[i] = latencies[latencies.size() - 1 - i];
             auto [mean, std] = Statistics(warmupLatencies);
             if (Duration(testStart, Nhrc::now()) >= Warmup.MaxDuration
                 || std <= Warmup.ThresholdCoef * mean) {
-                cout << "Warmup criterion: " << (std <= Warmup.ThresholdCoef * mean) << endl;
+                // cout << "Warmup criterion: " << (std <= Warmup.ThresholdCoef * mean) << endl;
                 warmupDone = true;
                 latencies.clear();
                 testStart = Nhrc::now();
@@ -154,26 +154,29 @@ ui32 TBenchmark::PrepareEnvironment() {
     ui64 qd = Factors.QueueDepth;
 
     srand(time(nullptr));
-    ui64 iterations = std::ceil((ld)Environment.Filesize / (rs * qd));
-    ui64 bufSize = std::ceil((ld)rs / sizeof(ui32));
 
-    std::unique_ptr<struct iovec[]> buffersPtr(new struct iovec[qd]);
-    std::vector<std::unique_ptr<ui32[]>> buffersData(qd);
+    if (!Environment.Unlink) {
+        ui64 iterations = std::ceil((ld)Environment.Filesize / (rs * qd));
+        ui64 bufSize = std::ceil((ld)rs / sizeof(ui32));
 
-    for (ui32 i = 0; i < qd; i++) {
-        buffersData[i] = std::unique_ptr<ui32[]>(new ui32[bufSize]);
-        buffersPtr[i].iov_base = buffersData[i].get();
-        buffersPtr[i].iov_len = rs;
-    }
+        std::unique_ptr<struct iovec[]> buffersPtr(new struct iovec[qd]);
+        std::vector<std::unique_ptr<ui32[]>> buffersData(qd);
 
-    off_t offset = 0;
+        for (ui32 i = 0; i < qd; i++) {
+            buffersData[i] = std::unique_ptr<ui32[]>(new ui32[bufSize]);
+            buffersPtr[i].iov_base = buffersData[i].get();
+            buffersPtr[i].iov_len = rs;
+        }
 
-    IAPI* api = Factory->Construct();
-    for (ui64 i = 0; i < iterations; i++) {
-        api->pwritev(fd, buffersPtr.get(), qd, offset);
-        for (ui32 j = 0; j < qd; j++)
-            buffersData[j][0]++;
-        offset += rs * qd;
+        off_t offset = 0;
+
+        IAPI* api = Factory->Construct();
+        for (ui64 i = 0; i < iterations; i++) {
+            api->pwritev(fd, buffersPtr.get(), qd, offset);
+            for (ui32 j = 0; j < qd; j++)
+                buffersData[j][0]++;
+            offset += rs * qd;
+        }
     }
 
     return fd;
@@ -183,14 +186,16 @@ ui32 TBenchmark::PrepareEnvironment() {
 std::pair<ui64, ui64> Statistics(const std::vector<ui64>& sample) {
     if (sample.empty())
         throw std::runtime_error("Trying to get statistics from an empty sample");
-    ui64 sum = std::accumulate(sample.begin(), sample.end(), 0);
+    ui64 sum = 0;
+    for (ui64 value : sample)
+        sum += value;
     ui32 size = sample.size();
-    ui64 mean = floor(sum / size);
+    ui64 mean = sum / size;
 
     sum = 0;
     for (ui64 value : sample)
         sum += (value - mean) * (value - mean);
-    ui64 std = (size > 1 ? floor(sqrtl(sum / (size - 1))) : 0);
+    ui64 std = (size > 1 ? sqrtl((ld)sum / (size - 1)) : 0);
 
     return {mean, std};
 }
