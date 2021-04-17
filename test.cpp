@@ -15,64 +15,96 @@ using namespace std;
 
 
 // ~ Fixed latency API
-std::pair<ssize_t, ui64> TFixedLatencyAPI::pread(int fd, void* buf, size_t count, off_t offset) {
-    return {0, Latency};
+std::pair<ssize_t, ui64> TFixedLatencyAPI::Read(int fd, const std::vector<void*>& bufs, size_t count, const std::vector<off_t>& offsets) {
+    return {0, Latency * offsets.size()};
 }
 
-std::pair<ssize_t, ui64> TFixedLatencyAPI::pwrite(int fd, const void *buf, size_t count, off_t offset) {
-    return {0, Latency};
+std::pair<ssize_t, ui64> TFixedLatencyAPI::Write(int fd, const std::vector<void*>& bufs, size_t count, const std::vector<off_t>& offsets) {
+    return {0, Latency * offsets.size()};
 }
 
-std::pair<ssize_t, ui64> TFixedLatencyAPI::preadv(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
-    return {0, Latency};
+std::pair<ssize_t, ui64> TFixedLatencyAPI::Read(int fd, const std::vector<const struct iovec*>& iovs, int iovcnt, const std::vector<off_t>& offsets) {
+    return {0, Latency * offsets.size()};
 }
 
-std::pair<ssize_t, ui64> TFixedLatencyAPI::pwritev(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
-    return {0, Latency};
+std::pair<ssize_t, ui64> TFixedLatencyAPI::Write(int fd, const std::vector<const struct iovec*>& iovs, int iovcnt, const std::vector<off_t>& offsets) {
+    return {0, Latency * offsets.size()};
 }
 
 
 // ~ Switching latency API
-std::pair<ssize_t, ui64> TSwitchingLatencyAPI::pread(int fd, void* buf, size_t count, off_t offset) {
-    Index = (Index + 1) % LatencyPool.size();
-    return {0, LatencyPool[Index]};
+std::pair<ssize_t, ui64> TSwitchingLatencyAPI::Read(int fd, const std::vector<void*>& bufs, size_t count, const std::vector<off_t>& offsets) {
+    ui64 latency = 0;
+    for (ui32 i = 0; i < offsets.size(); i++) {
+        Index = (Index + 1) % LatencyPool.size();
+        latency += LatencyPool[Index];
+    }
+    return {0, latency};
 }
 
-std::pair<ssize_t, ui64> TSwitchingLatencyAPI::pwrite(int fd, const void *buf, size_t count, off_t offset) {
-    Index = (Index + 1) % LatencyPool.size();
-    return {0, LatencyPool[Index]};
+std::pair<ssize_t, ui64> TSwitchingLatencyAPI::Write(int fd, const std::vector<void*>& bufs, size_t count, const std::vector<off_t>& offsets) {
+    ui64 latency = 0;
+    for (ui32 i = 0; i < offsets.size(); i++) {
+        Index = (Index + 1) % LatencyPool.size();
+        latency += LatencyPool[Index];
+    }
+    return {0, latency};
 }
 
-std::pair<ssize_t, ui64> TSwitchingLatencyAPI::preadv(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
-    Index = (Index + 1) % LatencyPool.size();
-    return {0, LatencyPool[Index]};
+std::pair<ssize_t, ui64> TSwitchingLatencyAPI::Read(int fd, const std::vector<const struct iovec*>& iovs, int iovcnt, const std::vector<off_t>& offsets) {
+    ui64 latency = 0;
+    for (ui32 i = 0; i < offsets.size(); i++) {
+        Index = (Index + 1) % LatencyPool.size();
+        latency += LatencyPool[Index];
+    }
+    return {0, latency};
 }
 
-std::pair<ssize_t, ui64> TSwitchingLatencyAPI::pwritev(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
-    Index = (Index + 1) % LatencyPool.size();
-    return {0, LatencyPool[Index]};
+std::pair<ssize_t, ui64> TSwitchingLatencyAPI::Write(int fd, const std::vector<const struct iovec*>& iovs, int iovcnt, const std::vector<off_t>& offsets) {
+    ui64 latency = 0;
+    for (ui32 i = 0; i < offsets.size(); i++) {
+        Index = (Index + 1) % LatencyPool.size();
+        latency += LatencyPool[Index];
+    }
+    return {0, latency};
 }
 
 
 // ~ Random latency API
-std::pair<ssize_t, ui64> TRandomLatencyAPI::pread(int fd, void* buf, size_t count, off_t offset) {
-    ui32 index = rand() % LatencyPool.size();
-    return {0, LatencyPool[index]};
+std::pair<ssize_t, ui64> TRandomLatencyAPI::Read(int fd, const std::vector<void*>& bufs, size_t count, const std::vector<off_t>& offsets) {
+    ui64 latency = 0;
+    for (ui32 i = 0; i < offsets.size(); i++) {
+        ui32 index = rand() % LatencyPool.size();
+        latency += LatencyPool[index];
+    }
+    return {0, latency};
 }
 
-std::pair<ssize_t, ui64> TRandomLatencyAPI::pwrite(int fd, const void *buf, size_t count, off_t offset) {
-    ui32 index = rand() % LatencyPool.size();
-    return {0, LatencyPool[index]};
+std::pair<ssize_t, ui64> TRandomLatencyAPI::Write(int fd, const std::vector<void*>& bufs, size_t count, const std::vector<off_t>& offsets) {
+    ui64 latency = 0;
+    for (ui32 i = 0; i < offsets.size(); i++) {
+        ui32 index = rand() % LatencyPool.size();
+        latency += LatencyPool[index];
+    }
+    return {0, latency};
 }
 
-std::pair<ssize_t, ui64> TRandomLatencyAPI::preadv(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
-    ui32 index = rand() % LatencyPool.size();
-    return {0, LatencyPool[index]};
+std::pair<ssize_t, ui64> TRandomLatencyAPI::Read(int fd, const std::vector<const struct iovec*>& iovs, int iovcnt, const std::vector<off_t>& offsets) {
+    ui64 latency = 0;
+    for (ui32 i = 0; i < offsets.size(); i++) {
+        ui32 index = rand() % LatencyPool.size();
+        latency += LatencyPool[index];
+    }
+    return {0, latency};
 }
 
-std::pair<ssize_t, ui64> TRandomLatencyAPI::pwritev(int fd, const struct iovec* iov, int iovcnt, off_t offset) {
-    ui32 index = rand() % LatencyPool.size();
-    return {0, LatencyPool[index]};
+std::pair<ssize_t, ui64> TRandomLatencyAPI::Write(int fd, const std::vector<const struct iovec*>& iovs, int iovcnt, const std::vector<off_t>& offsets) {
+    ui64 latency = 0;
+    for (ui32 i = 0; i < offsets.size(); i++) {
+        ui32 index = rand() % LatencyPool.size();
+        latency += LatencyPool[index];
+    }
+    return {0, latency};
 }
 
 

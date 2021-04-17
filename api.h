@@ -17,13 +17,27 @@ class IAPI {
 public:
     virtual ~IAPI() = default;
 
-    virtual std::pair<ssize_t, ui64> pread(int fd, void* buf, size_t count, off_t offset) = 0;
+    // ~ Batch operations with time measurement
+    // ~ Positional
+    virtual std::pair<ssize_t, ui64> Read(int fd, const std::vector<void*>& bufs, size_t count, const std::vector<off_t>& offsets);
 
-    virtual std::pair<ssize_t, ui64> pwrite(int fd, const void *buf, size_t count, off_t offset) = 0;
+    virtual std::pair<ssize_t, ui64> Write(int fd, const std::vector<void*>& bufs, size_t count, const std::vector<off_t>& offsets);
 
-    virtual std::pair<ssize_t, ui64> preadv(int fd, const struct iovec* iov, int iovcnt, off_t offset) = 0;
+    // ~ Positional and vectored
+    virtual std::pair<ssize_t, ui64> Read(int fd, const std::vector<const struct iovec*>& iovs, int iovcnt, const std::vector<off_t>& offsets);
 
-    virtual std::pair<ssize_t, ui64> pwritev(int fd, const struct iovec* iov, int iovcnt, off_t offset) = 0;
+    virtual std::pair<ssize_t, ui64> Write(int fd, const std::vector<const struct iovec*>& iovs, int iovcnt, const std::vector<off_t>& offsets);
+
+protected:
+    // ~ Base operations
+    virtual ssize_t pread(int fd, void* buf, size_t count, off_t offset) = 0;
+
+    virtual ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) = 0;
+
+    virtual ssize_t preadv(int fd, const struct iovec* iov, int iovcnt, off_t offset) = 0;
+
+    virtual ssize_t pwritev(int fd, const struct iovec* iov, int iovcnt, off_t offset) = 0;
+
 };
 
 
@@ -67,13 +81,13 @@ private:
 // ~ API interface POSIX implementation
 class TPosixAPI : public IAPI {
 public:
-    virtual std::pair<ssize_t, ui64> pread(int fd, void* buf, size_t count, off_t offset) override;
+    virtual ssize_t pread(int fd, void* buf, size_t count, off_t offset) override;
 
-    virtual std::pair<ssize_t, ui64> pwrite(int fd, const void *buf, size_t count, off_t offset) override;
+    virtual ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset) override;
 
-    virtual std::pair<ssize_t, ui64> preadv(int fd, const struct iovec* iov, int iovcnt, off_t offset) override;
+    virtual ssize_t preadv(int fd, const struct iovec* iov, int iovcnt, off_t offset) override;
 
-    virtual std::pair<ssize_t, ui64> pwritev(int fd, const struct iovec* iov, int iovcnt, off_t offset) override;
+    virtual ssize_t pwritev(int fd, const struct iovec* iov, int iovcnt, off_t offset) override;
 
 };
 

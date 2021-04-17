@@ -44,22 +44,30 @@ std::vector<ui64> TBenchmark::Benchmark() {
     const ui64 bufSize = ceil((long double)rs / sizeof(ui32));
     // ~ Buffers for storing data used in operations
     std::vector<std::unique_ptr<ui32[]>> bufferPtrs(BatchSize); // Case of qd == 1
-    std::vector<std::unique_ptr<struct iovec[]>> buffersPtrs(BatchSize); // Case of qd > 1
+    std::vector<std::unique_ptr<struct iovec[]>> iovPtrs(BatchSize); // Case of qd > 1
     // ~ Unique ptrs storing the actual data
-    std::vector<std::unique_ptr<ui32[]>> buffersData(BatchSize * qd); 
+    std::vector<std::unique_ptr<ui32[]>> iovData(BatchSize * qd); 
 
     // Allocate data for buffers.
     for (ui32 i = 0; i < BatchSize; i++) {
         if (qd == 1) {
             bufferPtrs[i].reset(new ui32[bufSize]);
         } else if (qd > 1) {
-            buffersPtrs[i].reset(new struct iovec[qd]);
+            iovPtrs[i].reset(new struct iovec[qd]);
             for (ui32 j = 0; j < qd; j++) {
-                buffersData[i * BatchSize + j] = std::unique_ptr<ui32[]>(new ui32[bufSize]);
-                buffersPtrs[i][j].iov_base = buffersData[i * BatchSize + j].get();
-                buffersPtrs[i][j].iov_len = rs;
+                iovData[i * BatchSize + j] = std::unique_ptr<ui32[]>(new ui32[bufSize]);
+                iovPtrs[i][j].iov_base = iovData[i * BatchSize + j].get();
+                iovPtrs[i][j].iov_len = rs;
             }
         }
+    }
+
+    // ~ Vectors of buffers and iovs used as arguments in read and write operation calls
+    std::vector<void *> bufs(BatchSize);
+    std::vector<const struct iovec*> iovs(BatchSize);
+    for (ui32 i = 0; i < BatchSize; i++) {
+        bufs[i] = bufferPtrs[i].get();
+        iovs[i] = iovPtrs[i].get();
     }
 
     // ~ Batch latencies
@@ -80,25 +88,20 @@ std::vector<ui64> TBenchmark::Benchmark() {
     auto testStart = Nhrc::now();
     bool warmupDone = false;
     while (!warmupDone || Duration(testStart, Nhrc::now()) < TestDuration) {
-        ui64 batchLatency = 0;
-        for (ui32 i = 0; i < BatchSize; i++) { 
-           ssize_t bytesProcessed;
-           ui64 latency;
-           if (qd == 1) {
-                if (Pattern.IsRead)
-                    std::tie(bytesProcessed, latency) = api->pread(fd, bufferPtrs[i].get(), rs, offsets[i]);
-                else
-                    std::tie(bytesProcessed, latency) = api->pwrite(fd, bufferPtrs[i].get(), rs, offsets[i]);
-            } else if (qd > 1) {
-                if (Pattern.IsRead)
-                    std::tie(bytesProcessed, latency) = api->preadv(fd, buffersPtrs[i].get(), qd, offsets[i]);
-                else
-                    std::tie(bytesProcessed, latency) = api->pwritev(fd, buffersPtrs[i].get(), qd, offsets[i]);
-            }
-            batchLatency += latency;
+       ssize_t bytesProcessed;
+       ui64 latency;
+       if (qd == 1) {
+            if (Pattern.IsRead)
+                std::tie(bytesProcessed, latency) = api->Read(fd, bufs, rs, offsets);
+            else
+                std::tie(bytesProcessed, latency) = api->Write(fd, bufs, rs, offsets);
+        } else if (qd > 1) {
+            if (Pattern.IsRead)
+                std::tie(bytesProcessed, latency) = api->Read(fd, iovs, qd, offsets);
+            else
+                std::tie(bytesProcessed, latency) = api->Write(fd, iovs, qd, offsets);
         }
-        latencies.push_back(batchLatency);
-        
+        latencies.push_back(latency);
 
         // Make the data different to avoid system optimizations.
         for (ui32 i = 0; i < BatchSize; i++) {
@@ -106,7 +109,7 @@ std::vector<ui64> TBenchmark::Benchmark() {
                 bufferPtrs[i][0]++;
             } else if (qd > 1) {
                 for (ui32 j = 0; j < qd; j++)
-                    buffersData[i * BatchSize + j][0]++;
+                    iovData[i * BatchSize + j][0]++;
             }
         }
 
@@ -150,8 +153,8 @@ ui32 TBenchmark::PrepareEnvironment() {
     if ((fd = open(filepath, flags, S_IRWXU)) == -1)
         throw std::runtime_error("Couldn't not open file");
 
-    ui64 rs = Factors.RequestSize;
-    ui64 qd = Factors.QueueDepth;
+    ui64 rs = 64_KB;
+    ui64 qd = 8;
 
     srand(time(nullptr));
 
@@ -159,22 +162,22 @@ ui32 TBenchmark::PrepareEnvironment() {
         ui64 iterations = std::ceil((ld)Environment.Filesize / (rs * qd));
         ui64 bufSize = std::ceil((ld)rs / sizeof(ui32));
 
-        std::unique_ptr<struct iovec[]> buffersPtr(new struct iovec[qd]);
-        std::vector<std::unique_ptr<ui32[]>> buffersData(qd);
+        std::unique_ptr<struct iovec[]> iovPtr(new struct iovec[qd]);
+        std::vector<std::unique_ptr<ui32[]>> iovData(qd);
 
         for (ui32 i = 0; i < qd; i++) {
-            buffersData[i] = std::unique_ptr<ui32[]>(new ui32[bufSize]);
-            buffersPtr[i].iov_base = buffersData[i].get();
-            buffersPtr[i].iov_len = rs;
+            iovData[i] = std::unique_ptr<ui32[]>(new ui32[bufSize]);
+            iovPtr[i].iov_base = iovData[i].get();
+            iovPtr[i].iov_len = rs;
         }
 
         off_t offset = 0;
 
         IAPI* api = Factory->Construct();
         for (ui64 i = 0; i < iterations; i++) {
-            api->pwritev(fd, buffersPtr.get(), qd, offset);
+            api->Write(fd, {iovPtr.get()}, qd, {offset});
             for (ui32 j = 0; j < qd; j++)
-                buffersData[j][0]++;
+                iovData[j][0]++;
             offset += rs * qd;
         }
     }
