@@ -42,7 +42,7 @@ protected:
 
 
 // ~ API factory interface
-// Constructs and stores IAPI* objects
+// Constructs and stores IAPI* objects until the next call
 class IAPIFactory {
 public:
     virtual ~IAPIFactory() = default;
@@ -60,15 +60,17 @@ public:
     ~TAPIFactory() { APIs.clear(); }
 
     IAPI* Construct() override {
+        APIs.clear();
         APIs.emplace_back();
         return &APIs.back();
     }
 
     std::vector<IAPI*> Construct(ui32 amount) override {
-        APIs.resize(APIs.size() + amount);
+        APIs.clear();
+        APIs.resize(amount);
         std::vector<IAPI*> result(amount);
         for (ui32 i = 0; i < amount; i++) {
-            result[amount - 1 - i] = &APIs[APIs.size() - 1 - i];
+            result[i] = &APIs[i];
         }
         return result;
     }

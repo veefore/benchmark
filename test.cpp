@@ -171,9 +171,9 @@ void RunTests() {
     pattern.IsConsecutive = true;
     pattern.IsRead = true;
 
-    TFactors factors;
-    factors.RequestSize = 1_KB;
-    factors.QueueDepth = 1;
+    TFactorLevels factorLevels;
+    factorLevels.RequestSize = 1_KB;
+    factorLevels.QueueDepth = 1;
 
     TWarmupParams warmup;
     warmup.ThresholdCoef = 0.15;
@@ -217,19 +217,19 @@ void RunTests() {
 
         cout << "Fixed latency test. Latency: 15 us." << endl;
         TAPIFactory<TFixedLatencyAPI> fixedFactory;
-        TBenchmark fixedBenchmark(pattern, factors, warmup, environment, testDuration, batchSizes[i], &fixedFactory);
+        TBenchmark fixedBenchmark(pattern, factorLevels, warmup, environment, testDuration, batchSizes[i], &fixedFactory);
         failed += CompareResult(fixedBenchmark.Benchmark(), fixedLatencyMean[i], fixedLatencyStd[i]);
         cout << endl;
 
         cout << "Switching latency test. Latencies: {20 us, 30 us, 40 us}." << endl;
         TAPIFactory<TSwitchingLatencyAPI> switchingFactory;
-        TBenchmark switchingBenchmark(pattern, factors, warmup, environment, testDuration, batchSizes[i], &switchingFactory);    
+        TBenchmark switchingBenchmark(pattern, factorLevels, warmup, environment, testDuration, batchSizes[i], &switchingFactory);    
         failed += CompareResult(switchingBenchmark.Benchmark(), switchingLatencyMean[i], switchingLatencyStd[i]);
         cout << endl;
 
         cout << "Random latency test. Latencies: {10 us, 20 us, 60 us}." << endl;
         TAPIFactory<TRandomLatencyAPI> randomFactory;
-        TBenchmark randomBenchmark(pattern, factors, warmup, environment, testDuration, batchSizes[i], &randomFactory);
+        TBenchmark randomBenchmark(pattern, factorLevels, warmup, environment, testDuration, batchSizes[i], &randomFactory);
         failed += CompareResult(randomBenchmark.Benchmark(), randomLatencyMean[i], randomLatencyStd[i]);
         cout << endl;
 

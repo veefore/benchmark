@@ -15,17 +15,39 @@
 #include <sys/stat.h> // open(), open flags
 #include <fcntl.h> // open(), open flags
 #include <tuple> // std::tie()
+#include <numeric> // std::iota()
 
 #include <iostream>
 using namespace std;
 
 
-TBenchmark::TBenchmark(const TPattern& pattern, const TFactors& factors,
+std::pair<ui64, ui64> Statistics(const std::vector<ui64>& sample) {
+    if (sample.empty())
+        throw std::runtime_error("Trying to get statistics from an empty sample");
+    ui64 sum = 0;
+    for (ui64 value : sample)
+        sum += value;
+    ui32 size = sample.size();
+    ui64 mean = sum / size;
+
+    sum = 0;
+    for (ui64 value : sample)
+        sum += (value - mean) * (value - mean);
+    ui64 std = (size > 1 ? sqrtl((ld)sum / (size - 1)) : 0);
+
+    return {mean, std};
+}
+
+
+TBenchmark::TBenchmark(TPattern pattern,
+                       const TFactorLevels& factorLevels,
                        const TWarmupParams& warmup,
-                       const TEnvironmentParams& environment, ui64 testDuration,
-                       ui32 batchSize, IAPIFactory* factory)
+                       const TEnvironmentParams& environment,
+                       ui64 testDuration,
+                       ui32 batchSize,
+                       IAPIFactory* factory)
                        : Pattern(pattern)
-                       , Factors(factors)
+                       , FactorLevels(factorLevels)
                        , Warmup(warmup)
                        , Environment(environment)
                        , TestDuration(testDuration)
@@ -33,10 +55,10 @@ TBenchmark::TBenchmark(const TPattern& pattern, const TFactors& factors,
                        , Factory(factory) {}
 
 
-std::vector<ui64> TBenchmark::Benchmark() {
+std::vector<ui64> TBenchmark::Benchmark() const {
     // ~ Parameter aliases
-    ui64 rs = Factors.RequestSize;
-    ui64 qd = Factors.QueueDepth;
+    ui64 rs = FactorLevels.RequestSize;
+    ui64 qd = FactorLevels.QueueDepth;
     ui32 fd = PrepareEnvironment();
     ui64 filesize = Environment.Filesize;
     IAPI* api = Factory->Construct();
@@ -141,7 +163,7 @@ std::vector<ui64> TBenchmark::Benchmark() {
 }
 
 
-ui32 TBenchmark::PrepareEnvironment() {
+ui32 TBenchmark::PrepareEnvironment() const {
     const char* filepath = Environment.Filepath.c_str();
     // Removes the file if it exists and the Unlink flag is set
     if (Environment.Unlink)
@@ -186,21 +208,36 @@ ui32 TBenchmark::PrepareEnvironment() {
 }
 
 
-std::pair<ui64, ui64> Statistics(const std::vector<ui64>& sample) {
-    if (sample.empty())
-        throw std::runtime_error("Trying to get statistics from an empty sample");
-    ui64 sum = 0;
-    for (ui64 value : sample)
-        sum += value;
-    ui32 size = sample.size();
-    ui64 mean = sum / size;
+TExperimenter::TExperimenter(TPattern pattern,
+                             const std::vector<TFactorLevels>& expFactorLevels,
+                             ui32 replays,
+                             const TWarmupParams& warmup,
+                             const TEnvironmentParams& environment,
+                             ui64 testDuration,
+                             ui32 batchSize,
+                             IAPIFactory* factory)
+                             : TBenchmark(pattern, TFactorLevels(),
+                                          warmup, environment,
+                                          testDuration, batchSize,
+                                          factory)
+                             , ExpFactorLevels(expFactorLevels)
+                             , Replays(replays) {
+    if (ExpFactorLevels.size() == 0) {
+        throw std::runtime_error("Passed 0 factor levels for experiment");
+    }
+    if (factory == nullptr) {
+        throw std::runtime_error("Passed nullptr instead of a valid IAPIFactory pointer");
+    }
+}
 
-    sum = 0;
-    for (ui64 value : sample)
-        sum += (value - mean) * (value - mean);
-    ui64 std = (size > 1 ? sqrtl((ld)sum / (size - 1)) : 0);
 
-    return {mean, std};
+TExperimentResult TExperimenter::Experiment() const {
+    std::
+    for
+    // Generate order of tests
+    std::vector<ui32> order = GenerateOrder(ExpFactorLevels.size() * Replays);
+
+
 }
 
 
