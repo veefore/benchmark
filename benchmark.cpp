@@ -10,22 +10,84 @@
 #include <chrono> // std::chrono::*
 #include <stdexcept> // runtime_error
 #include <cmath> // sqrtl()
-#include <sys/uio.h> // struct iovec
-#include <unistd.h> // unlink()
+#include <sys/uio.h> // struct iovec #include <unistd.h> // unlink()
 #include <sys/stat.h> // open(), open flags
 #include <fcntl.h> // open(), open flags
+#include <unistd.h> // close()
 #include <tuple> // std::tie()
+#include <array> // std::array
+#include <cstdio> // popen()
 
 #include <iostream>
 using namespace std;
 
 
-TBenchmark::TBenchmark(const TPattern& pattern, const TFactors& factors,
+std::pair<ui64, ui64> Statistics(const std::vector<ui64>& sample) {
+    if (sample.empty())
+        throw std::runtime_error("Trying to get statistics from an empty sample");
+    ui64 sum = 0;
+    for (ui64 value : sample)
+        sum += value;
+    ui32 size = sample.size();
+    ui64 mean = sum / size;
+
+    sum = 0;
+    for (ui64 value : sample)
+        sum += (value - mean) * (value - mean);
+    ui64 std = (size > 1 ? sqrtl((ld)sum / (size - 1)) : 0);
+
+    return {mean, std};
+}
+
+
+std::string ExecuteCommand(const char* command, ui32& exitStatus) {
+    auto pipePtr = popen(command, "r");
+    if (!pipePtr)
+        throw std::runtime_error("Cannot open pipe.");
+    std::array<char, 128> buffer;
+    std::string result;
+    while (fgets(buffer.data(), buffer.size(), pipePtr) != nullptr)
+        result += buffer.data();
+    exitStatus = pclose(pipePtr);
+    return result;
+}
+
+
+void TFactorLevels::SetLevel(const std::string& factor, ui64 level) {
+    if (factor == "RS")
+        RequestSize = level;
+    else if (factor == "QD")
+        QueueDepth = level;
+    else if (factor == "DIO")
+        DirectIO = level;
+    else
+        throw runtime_error("TFactorsLevels::SetLevel() error: "
+                            "factor " + factor + " not supported");
+}
+
+
+ui64 TFactorLevels::GetLevel(const std::string& factor) const {
+    if (factor == "RS")
+        return RequestSize;
+    else if (factor == "QD")
+        return QueueDepth;
+    else if (factor == "DIO")
+        return DirectIO;
+    else
+        throw runtime_error("TFactorsLevels::GetLevel() error: "
+                            "Factor " + factor + " not supported");
+}
+
+
+TBenchmark::TBenchmark(TPattern pattern,
+                       const TFactorLevels& factorLevels,
                        const TWarmupParams& warmup,
-                       const TEnvironmentParams& environment, ui64 testDuration,
-                       ui32 batchSize, IAPIFactory* factory)
+                       const TEnvironmentParams& environment,
+                       ui64 testDuration,
+                       ui32 batchSize,
+                       IAPIFactory* factory)
                        : Pattern(pattern)
-                       , Factors(factors)
+                       , FactorLevels(factorLevels)
                        , Warmup(warmup)
                        , Environment(environment)
                        , TestDuration(testDuration)
@@ -35,8 +97,8 @@ TBenchmark::TBenchmark(const TPattern& pattern, const TFactors& factors,
 
 std::vector<ui64> TBenchmark::Benchmark() {
     // ~ Parameter aliases
-    ui64 rs = Factors.RequestSize;
-    ui64 qd = Factors.QueueDepth;
+    ui64 rs = FactorLevels.RequestSize;
+    ui64 qd = FactorLevels.QueueDepth;
     ui32 fd = PrepareEnvironment();
     ui64 filesize = Environment.Filesize;
     IAPI* api = Factory->Construct();
@@ -55,8 +117,8 @@ std::vector<ui64> TBenchmark::Benchmark() {
         } else if (qd > 1) {
             iovPtrs[i].reset(new struct iovec[qd]);
             for (ui32 j = 0; j < qd; j++) {
-                iovData[i * BatchSize + j] = std::unique_ptr<ui32[]>(new ui32[bufSize]);
-                iovPtrs[i][j].iov_base = iovData[i * BatchSize + j].get();
+                iovData[i * qd + j] = std::unique_ptr<ui32[]>(new ui32[bufSize]);
+                iovPtrs[i][j].iov_base = iovData[i * qd + j].get();
                 iovPtrs[i][j].iov_len = rs;
             }
         }
@@ -87,10 +149,13 @@ std::vector<ui64> TBenchmark::Benchmark() {
 
     auto testStart = Nhrc::now();
     bool warmupDone = false;
-    while (!warmupDone || Duration(testStart, Nhrc::now()) < TestDuration) {
-       ssize_t bytesProcessed;
-       ui64 latency;
-       if (qd == 1) {
+    ui64 measurements = 0;
+    while (!warmupDone || Duration(testStart, Nhrc::now()) < TestDuration
+            || latencies.size() < MinIterations) {
+
+        ssize_t bytesProcessed;
+        ui64 latency;
+        if (qd == 1) {
             if (Pattern.IsRead)
                 std::tie(bytesProcessed, latency) = api->Read(fd, bufs, rs, offsets);
             else
@@ -109,7 +174,7 @@ std::vector<ui64> TBenchmark::Benchmark() {
                 bufferPtrs[i][0]++;
             } else if (qd > 1) {
                 for (ui32 j = 0; j < qd; j++)
-                    iovData[i * BatchSize + j][0]++;
+                    iovData[i * qd + j][0]++;
             }
         }
 
@@ -137,28 +202,51 @@ std::vector<ui64> TBenchmark::Benchmark() {
             }
         }
     }
+    if (MinIterations == 0)
+        MinIterations = latencies.size();
+
+    close(fd);
+    unlink(Environment.Filepath.c_str());
     return latencies;
 }
 
 
-ui32 TBenchmark::PrepareEnvironment() {
+ui32 TBenchmark::PrepareEnvironment() const {
     const char* filepath = Environment.Filepath.c_str();
     // Removes the file if it exists and the Unlink flag is set
     if (Environment.Unlink)
         unlink(filepath);
 
+    if (Environment.PreparationScript != "") {
+        ui32 exitStatus;
+        ExecuteCommand(Environment.PreparationScript.c_str(), exitStatus);
+    }
+
     i32 fd;
     auto flags = O_RDWR | O_CREAT;
+
+    bool dio = FactorLevels.DirectIO;
+    #if defined (__linux__)
+    if (dio)
+        flags |= O_DIRECT;
+    #endif
+
+    #if defined (__APPLE__)
+    if (dio)
+        flags |= F_NOCACHE;
+    #endif
+
     // S_IRWXU = write permission for the file owner
     if ((fd = open(filepath, flags, S_IRWXU)) == -1)
-        throw std::runtime_error("Couldn't not open file");
+        throw std::runtime_error("Couldn't not open file \"" + Environment.Filepath + "\"");
 
     ui64 rs = 64_KB;
     ui64 qd = 8;
 
     srand(time(nullptr));
 
-    if (!Environment.Unlink) {
+    // Fill file with random data
+    if (Environment.Unlink) {
         ui64 iterations = std::ceil((ld)Environment.Filesize / (rs * qd));
         ui64 bufSize = std::ceil((ld)rs / sizeof(ui32));
 
@@ -183,24 +271,6 @@ ui32 TBenchmark::PrepareEnvironment() {
     }
 
     return fd;
-}
-
-
-std::pair<ui64, ui64> Statistics(const std::vector<ui64>& sample) {
-    if (sample.empty())
-        throw std::runtime_error("Trying to get statistics from an empty sample");
-    ui64 sum = 0;
-    for (ui64 value : sample)
-        sum += value;
-    ui32 size = sample.size();
-    ui64 mean = sum / size;
-
-    sum = 0;
-    for (ui64 value : sample)
-        sum += (value - mean) * (value - mean);
-    ui64 std = (size > 1 ? sqrtl((ld)sum / (size - 1)) : 0);
-
-    return {mean, std};
 }
 
 

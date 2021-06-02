@@ -4,13 +4,19 @@
 #define __MAIN__CPP__
 
 
-#include "test.h"
+//#include "test.h"
+#include "io.h"
 
-
-using namespace std;
+//using namespace std;
 
 int main() {
-    RunTests();
+    //RunTests();
+    auto experimenter = ReadExperiment();
+    auto results = experimenter.Experiment();
+    PrintExperimentResults(results,
+                           experimenter.GetPattern(),
+                           experimenter.GetFactorLevels(),
+                           experimenter.GetVaryingFactors());
     return 0;
 }
 
