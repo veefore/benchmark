@@ -42,7 +42,7 @@ protected:
 
 
 // ~ API factory interface
-// Constructs and stores IAPI* objects until the next call
+// Constructs and stores IAPI* objects
 class IAPIFactory {
 public:
     virtual ~IAPIFactory() = default;

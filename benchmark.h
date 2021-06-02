@@ -26,12 +26,20 @@ struct TPattern {
 
 // ~ Class storing factor levels
 // Characterizes a point in the factor space
-struct TFactorLevels {
+class TFactorLevels {
+public:
+    void SetLevel(const std::string& factor, ui64 level);
+
+    ui64 GetLevel(const std::string& factor) const;
+
+public:
     // ~ Average size of the memory access request (in bytes)
     ui64 RequestSize = 64_KB;
     // ~ Depth of the maintained queue
     // Queue is maintained through readV and writeV operations.
     ui64 QueueDepth = 8;
+    // ~ Flag to skip cache
+    ui64 DirectIO = 0;
 };
 
 
@@ -50,8 +58,9 @@ struct TWarmupParams {
 // ~ Class storing environment parameters
 struct TEnvironmentParams {
     std::string Filepath; // ~ Path to the file to be tested
-    bool Unlink = true; // ~ Flag showing that the file should be removed if it exists
     ui64 Filesize; // ~ Size of the file to be tested (in bytes)
+    bool Unlink = true; // ~ Flag showing that the file should be removed if it exists
+    std::string PreparationScript = ""; // ~ Script called at the beginning of preparation
 };
 
 
@@ -66,8 +75,7 @@ public:
     // ~ Main benchmarking method
     // Performs a single benchmark.
     // Returns a vector of latencies.
-    // Can be called multiple times.
-    std::vector<ui64> Benchmark() const;
+    std::vector<ui64> Benchmark();
 
 private:
     // ~ Method that prepares the environment
@@ -86,37 +94,11 @@ private:
     // ~ Factory for producting IAPI* objects
     // | Stores the objects created.
     IAPIFactory* Factory;
+    // ~ Min amount of iterations to be performed during testing (excluding warmup)
+    // Parameter is set in the first benchmark run.
+    ui64 MinIterations = 0;
 };
 
-
-// TExperimentResult result[patternIndex][expFactorLevelsIndex][batchIndex]
-//  == std::make_pair(meanThroughput, throughputStd);
-using TExperimentResult = std::vector<std::vector<std::vector<std::pair<ui64, ui64>>>>;
-
-
-// ~ Class for conducting multifactor experiments
-// Intended for benchmarking multiple points in the factor space multiple times
-class TExperimenter {
-public:
-    // Reads an experiment description from stdin.
-    TExperimenter();
-
-    // ~ Main experimenting method
-    // Performs an experiment according to the read description.
-    // Returns a vector of pairs: (mean throughput, throughput std).
-    // Can be called multiple times.
-    TExperimentResult Experiment() const;
-
-private:
-    // ~ Method for running a benchmark multiple times
-    // Replays a benchmark specified amount of times and aggregates the results
-    // Returns a vector of pairs: (mean throughput, throughput std).
-    // Can be called multiple times.
-    std::vector<std::pair<ui64, ui64>> Benchmark(const TBenchmark& benchmark, ui32 replays) const;
-
-
-};
-    
 
 
 
