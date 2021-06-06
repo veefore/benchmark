@@ -28,7 +28,7 @@ std::pair<ui64, ui64> Statistics(const std::vector<ui64>& sample) {
     ui64 sum = 0;
     for (ui64 value : sample)
         sum += value;
-    ui32 size = sample.size();
+    ui64 size = sample.size();
     ui64 mean = sum / size;
 
     sum = 0;

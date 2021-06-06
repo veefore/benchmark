@@ -90,10 +90,10 @@ std::pair<std::string, std::vector<ui64>> ReadFactor() {
     cerr << "Reading factor.\n";
     cerr << "Factors are:\n"
          << "\"RS\" for Request Size\n"
-         << "Range: [4KB, 512MB] (Input value in Bytes!)\n"
+         << "Recommended range: [512B, 512MB] (Input value in Bytes!)\n"
          << "Default: 64KB\n"
          << "\"QD\" for Queue Depth\n"
-         << "Range: [1, 256]\n"
+         << "Recommended range: [1, 256]\n"
          << "Default: 8\n"
          << "\"DIO\" for Direct IO\n"
          << "Range: {0, 1}\n"
